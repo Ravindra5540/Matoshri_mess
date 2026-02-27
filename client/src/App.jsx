@@ -4,6 +4,9 @@ import AddCustomer from './pages/AddCustomer'
 import ViewCustomers from './pages/ViewCustomers'
 import Analysis from './pages/Analysis'
 import Dashboard from './pages/Dashboard'
+import Upcoming from './pages/Upcoming'
+import Overdue from './pages/Overdue'
+import Expired from './pages/Expired'
 import { initialCustomers } from './data'
 
 export default function App() {
@@ -42,6 +45,9 @@ export default function App() {
       {page === 'analysis' && <Analysis setPage={setPage} />}
 
       {page === 'dashboard' && <Dashboard setPage={setPage} />}
+      {page === 'upcoming' && <Upcoming setPage={setPage} />}
+{page === 'overdue' && <Overdue setPage={setPage} />}
+{page === 'expired' && <Expired setPage={setPage} />}
     </>
   )
 }

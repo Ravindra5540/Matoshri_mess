@@ -95,7 +95,9 @@ useEffect(() => {
   }
 
   // 🔥 SAVE CUSTOMER + INITIAL PAYMENT (SAFE DESIGN)
-  const handleSubmit = async () => {
+  // 🔥 SAVE CUSTOMER + INITIAL PAYMENT (SAFE DESIGN)
+const handleSubmit = async () => {
+  try {
     if (!validateForm()) return
 
     const today = new Date()
@@ -111,7 +113,9 @@ useEffect(() => {
     if (!window.confirm('Are you sure you want to save this customer?')) return
 
     // 🔑 subscription id
-    const subscriptionId = crypto.randomUUID()
+    // 🔑 subscription id (Mobile Safe)
+const subscriptionId =
+  Date.now().toString() + Math.random().toString(16).slice(2)
 
     const dueDate = calculateDueDate(
       form.startDate,
@@ -120,7 +124,7 @@ useEffect(() => {
       Number(form.paidAmount)
     )
 
-    // ✅ CUSTOMER DATA (NO paymentHistory here)
+    // ✅ CUSTOMER DATA
     const customerData = {
       name: form.name,
       phone: form.phone,
@@ -136,102 +140,129 @@ useEffect(() => {
       currentSubscriptionId: subscriptionId,
     }
 
-    try {
-      // 1️⃣ Save customer
-      const customerRef = await addDoc(
-        collection(db, 'customers'),
-        customerData
-      )
+    // 1️⃣ Save customer
+    const customerRef = await addDoc(
+      collection(db, 'customers'),
+      customerData
+    )
 
-      // 2️⃣ Save initial payment separately (dashboard-safe)
-      if (Number(form.paidAmount) > 0) {
-        await addDoc(collection(db, 'payments'), {
-          customerId: customerRef.id,
-          customerName: form.name,
-          subscriptionId,
-          amount: Number(form.paidAmount),
-          paymentType: form.paymentType,
-          date: Timestamp.now(),
-        })
-      }
-
-      alert('Customer saved successfully ✅')
-      setPage('home')
-    } catch (error) {
-      console.error(error)
-      alert('Failed to save customer ❌')
+    // 2️⃣ Save initial payment
+    if (Number(form.paidAmount) > 0) {
+      await addDoc(collection(db, 'payments'), {
+        customerId: customerRef.id,
+        customerName: form.name,
+        subscriptionId,
+        amount: Number(form.paidAmount),
+        paymentType: form.paymentType,
+        date: Timestamp.now(),
+      })
     }
+
+    alert('Customer saved successfully ✅')
+    setPage('home')
+
+  } catch (error) {
+    console.error("FULL ERROR:", error)
+    alert(
+      "❌ Error Saving Customer:\n\n" +
+      (error?.message || JSON.stringify(error))
+    )
   }
+}
 
   return (
     <>
       <style>{`
-        * { box-sizing: border-box; }
-        body { margin: 0; font-family: Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, sans-serif; }
 
-        .page {
-          min-height: 100vh;
-          background: linear-gradient(135deg, #667eea, #764ba2);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
+  .page {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+  }
 
-        .card {
-          background: #fff;
-          padding: 30px;
-          width: 100%;
-          max-width: 420px;
-          border-radius: 12px;
-          box-shadow: 0 15px 30px rgba(0,0,0,0.2);
-        }
+  .card {
+    background: #fff;
+    padding: 30px;
+    width: 100%;
+    max-width: 420px;
+    border-radius: 12px;
+    box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+  }
 
-        .card h2 {
-          text-align: center;
-          margin-bottom: 20px;
-        }
+  .card h2 {
+    text-align: center;
+    margin-bottom: 20px;
+  }
 
-        .field {
-          display: flex;
-          flex-direction: column;
-          margin-bottom: 14px;
-        }
+  .field {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 14px;
+  }
 
-        .field label {
-          font-size: 14px;
-          margin-bottom: 5px;
-        }
+  .field label {
+    font-size: 14px;
+    margin-bottom: 5px;
+  }
 
-        .field input,
-        .field select {
-          padding: 10px;
-          border-radius: 6px;
-          border: 1px solid #ccc;
-        }
+  .field input,
+  .field select {
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+  }
 
-        .actions {
-          display: flex;
-          justify-content: space-between;
-          margin-top: 20px;
-        }
+  .actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+  }
 
-        .save {
-          background: #667eea;
-          color: white;
-          border: none;
-          padding: 10px 18px;
-          border-radius: 6px;
-          cursor: pointer;
-        }
+  .save {
+    background: #667eea;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
 
-        .cancel {
-          background: #ddd;
-          border: none;
-          padding: 10px 18px;
-          border-radius: 6px;
-          cursor: pointer;
-        }
-      `}</style>
+  .cancel {
+    background: #ddd;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  /* ✅ MOBILE IMPROVEMENT ONLY */
+  @media (max-width: 480px) {
+    .page {
+      align-items: flex-start;
+      padding-top: 20px;
+    }
+
+    .card {
+      padding: 20px;
+      border-radius: 10px;
+    }
+
+    .actions {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .save, .cancel {
+      width: 100%;
+    }
+  }
+`}</style>
 
       <div className="page">
         <div className="card">

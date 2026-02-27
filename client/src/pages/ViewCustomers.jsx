@@ -154,18 +154,30 @@ useEffect(() => {
   }
 
   // 📅 Holidays
-  const addHolidays = async c => {
+const addHolidays = async c => {
   const count = Number(holidayCount)
   if (!count || count <= 0) return alert('Invalid holiday count')
 
-  const oldEnd = new Date(c.endDate)
-  oldEnd.setDate(oldEnd.getDate() + count)
+  // 1️⃣ update end date
+  const newEnd = new Date(c.endDate)
+  newEnd.setDate(newEnd.getDate() + count)
 
+  // 2️⃣ accumulate holidays
   const totalHolidays = (c.holidays || 0) + count
 
+  // 3️⃣ decide due date
+  let newDueDate = c.dueDate || null
+
+  if (c.paid === c.totalAmount) {
+    const due = new Date(newEnd)
+    due.setDate(due.getDate() + 1)
+    newDueDate = due.toISOString().split('T')[0]
+  }
+
   await updateDoc(doc(db, 'customers', c.docId), {
-    endDate: oldEnd.toISOString().split('T')[0],
+    endDate: newEnd.toISOString().split('T')[0],
     holidays: totalHolidays,
+    dueDate: newDueDate,
   })
 
   setHolidayCount('')
@@ -194,47 +206,68 @@ useEffect(() => {
   }
 
   const saveRenew = async c => {
-    const total = Number(renewData.totalAmount)
-    const paid = Number(renewData.paid || 0)
-    if (paid > total) return alert('Invalid paid amount')
-    if (new Date(renewData.endDate) <= new Date(renewData.startDate))
-      return alert('End date must be after start date')
+  const total = Number(renewData.totalAmount)
+  const paid = Number(renewData.paid || 0)
 
-    const newSubId = crypto.randomUUID()
-    const dueDate = calculateDueDate(
-      renewData.startDate,
-      renewData.endDate,
-      total,
-      paid
-    )
+  // 🔐 VALIDATIONS
+  if (!renewData.startDate) return alert('Start date required')
+  if (!renewData.endDate) return alert('End date required')
 
-    await updateDoc(doc(db, 'customers', c.docId), {
-      startDate: renewData.startDate,
-      endDate: renewData.endDate,
-      messType: renewData.messType,
-      totalAmount: total,
-      paid,
-      remaining: total - paid,
-      dueDate,
-      currentSubscriptionId: newSubId,
+  if (new Date(renewData.endDate) <= new Date(renewData.startDate))
+    return alert('End date must be after start date')
+
+  if (!total || total <= 0)
+    return alert('Total amount must be greater than 0')
+
+  if (paid < 0) return alert('Paid amount cannot be negative')
+
+  if (paid > total) return alert('Paid amount cannot exceed total')
+
+  if (paid > 0 && !renewData.paymentType)
+    return alert('Select payment type')
+
+  // 🔁 subscription safety
+  if (new Date(renewData.startDate) <= new Date(c.endDate))
+    return alert('Renew start date must be after current end date')
+
+  // 🧾 PROCESS
+  // 🔑 subscription id (Mobile Safe)
+const newSubId =
+  Date.now().toString() + Math.random().toString(16).slice(2)
+
+  const dueDate = calculateDueDate(
+    renewData.startDate,
+    renewData.endDate,
+    total,
+    paid
+  )
+
+  await updateDoc(doc(db, 'customers', c.docId), {
+    startDate: renewData.startDate,
+    endDate: renewData.endDate,
+    messType: renewData.messType,
+    totalAmount: total,
+    paid,
+    remaining: total - paid,
+    dueDate,
+    currentSubscriptionId: newSubId,
+  })
+
+  if (paid > 0) {
+    await addDoc(collection(db, 'payments'), {
+      customerId: c.docId,
+      customerName: c.name,
+      subscriptionId: newSubId,
+      amount: paid,
+      paymentType: renewData.paymentType,
+      date: Timestamp.now(),
     })
-
-    if (paid > 0) {
-      await addDoc(collection(db, 'payments'), {
-        customerId: c.docId,
-        customerName: c.name,
-        subscriptionId: newSubId,
-        amount: paid,
-        paymentType: renewData.paymentType,
-        date: Timestamp.now(),
-      })
-    }
-
-    setRenewId(null)
-    fetchCustomers()
-    fetchPayments()
   }
-
+   alert("Renew successful ✅")
+  setRenewId(null)
+  fetchCustomers()
+  fetchPayments()
+}
   const deleteCustomer = async c => {
     if (!window.confirm(`Delete ${c.name}?`)) return
     await deleteDoc(doc(db, 'customers', c.docId))
@@ -341,17 +374,57 @@ useEffect(() => {
               <button onClick={cancelForms}>Cancel</button>
             </div>
           )}
+      {renewId === c.docId && (
+        <div className="inline">
+          <input
+            type="date"
+            value={renewData.startDate}
+            onChange={e =>
+              setRenewData({ ...renewData, startDate: e.target.value })
+            }
+          />
 
-          {renewId === c.docId && (
-            <div className="inline">
-              <input type="date" value={renewData.startDate} onChange={e => setRenewData({ ...renewData, startDate: e.target.value })} />
-              <input type="date" value={renewData.endDate} onChange={e => setRenewData({ ...renewData, endDate: e.target.value })} />
-              <input type="number" placeholder="Total" value={renewData.totalAmount} onChange={e => setRenewData({ ...renewData, totalAmount: e.target.value })} />
-              <input type="number" placeholder="Paid" value={renewData.paid} onChange={e => setRenewData({ ...renewData, paid: e.target.value })} />
-              <button onClick={() => saveRenew(c)}>Save</button>
-              <button onClick={cancelForms}>Cancel</button>
-            </div>
-          )}
+          <input
+            type="date"
+            value={renewData.endDate}
+            onChange={e =>
+              setRenewData({ ...renewData, endDate: e.target.value })
+            }
+          />
+
+          <input
+            type="number"
+            placeholder="Total Amount"
+            value={renewData.totalAmount}
+            onChange={e =>
+              setRenewData({ ...renewData, totalAmount: e.target.value })
+            }
+          />
+
+          <input
+            type="number"
+            placeholder="Paid Amount"
+            value={renewData.paid}
+            onChange={e =>
+              setRenewData({ ...renewData, paid: e.target.value })
+            }
+          />
+
+          {/* ✅ PAYMENT TYPE */}
+          <select
+            value={renewData.paymentType}
+            onChange={e =>
+              setRenewData({ ...renewData, paymentType: e.target.value })
+            }
+          >
+            <option value="cash">Cash</option>
+            <option value="online">Online</option>
+          </select>
+
+          <button onClick={() => saveRenew(c)}>Save</button>
+          <button onClick={cancelForms}>Cancel</button>
+        </div>
+      )}
 
           {editingId === c.docId && (
             <>
@@ -393,55 +466,114 @@ useEffect(() => {
         </div>
       ))}
       <style>{`
-        .container {
-          padding: 20px;
-          background: #f4f6f8;
-          min-height: 100vh;
-          position: relative;
-        }
-        h2 { text-align: center; }
-        .top-right {
-          position: absolute;
-          top: 20px;
-          right: 20px;
-        }
-        .search {
-          width: 100%;
-          padding: 10px;
-          margin-bottom: 15px;
-        }
-        .card {
-          background: #fff;
-          padding: 15px;
-          border-radius: 8px;
-          margin-bottom: 15px;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-        }
-        input, select {
-          width: 100%;
-          padding: 6px;
-          margin-bottom: 8px;
-        }
-        .actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 10px;
-        }
-        .inline {
-          display: flex;
-          gap: 8px;
-          margin-top: 10px;
-        }
-        button {
-          padding: 6px 10px;
-          cursor: pointer;
-        }
-        button:disabled {
-          background: #ccc;
-          cursor: not-allowed;
-        }
-      `}</style>
+  .container {
+    padding: 15px;
+    background: #f4f6f8;
+    min-height: 100vh;
+  }
+
+  h2 {
+    text-align: center;
+    margin-bottom: 15px;
+  }
+
+  .top-right {
+    width: 100%;
+    margin-bottom: 15px;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    background: #667eea;
+    color: white;
+    font-size: 16px;
+  }
+
+  .search {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    font-size: 16px;
+  }
+
+  .card {
+    background: #fff;
+    padding: 16px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+  }
+
+  input, select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+  }
+
+  button {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+  }
+
+  /* 📱 MOBILE (default) */
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .actions button {
+    width: 100%;
+  }
+
+  .inline {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  /* 💻 DESKTOP (restore old style) */
+  @media (min-width: 768px) {
+    .container {
+      max-width: 1000px;
+      margin: auto;
+    }
+
+    .top-right {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: auto;
+    }
+
+    .actions {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
+    .actions button {
+      width: auto;
+    }
+
+    .inline {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
+    .inline input,
+    .inline select {
+      width: auto;
+      flex: 1;
+    }
+  }
+`}</style>
     </div>
   ) 
 }

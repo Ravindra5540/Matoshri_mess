@@ -10,6 +10,17 @@ export default function Dashboard({ setPage }) {
   const [customers, setCustomers] = useState([])
   const [payments, setPayments] = useState([])
   const [days, setDays] = useState(7)
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 600)
+
+  // Detect screen resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 600)
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const fetchData = async () => {
     const customerSnap = await getDocs(collection(db, 'customers'))
@@ -36,7 +47,7 @@ export default function Dashboard({ setPage }) {
 
   const today = new Date()
 
-  // 🔹 Active & expired customers
+  // Active & expired customers
   const activeCustomers = customers.filter(
     c => c.endDate && new Date(c.endDate) >= today
   )
@@ -45,7 +56,7 @@ export default function Dashboard({ setPage }) {
     c => c.endDate && new Date(c.endDate) < today
   ).length
 
-  // 🔹 Basic stats
+  // Basic stats
   const totalCustomers = activeCustomers.length
 
   const totalCollected = activeCustomers.reduce(
@@ -58,7 +69,7 @@ export default function Dashboard({ setPage }) {
     0
   )
 
-  // 🔹 Ending soon (≤ 5 days)
+  // Ending soon (≤ 5 days)
   const endingSoon = activeCustomers.filter(c => {
     const diff = Math.ceil(
       (new Date(c.endDate) - today) / (1000 * 60 * 60 * 24)
@@ -66,21 +77,24 @@ export default function Dashboard({ setPage }) {
     return diff <= 5 && diff >= 0
   }).length
 
-  // 🔹 Pending payments
+  // Pending payments
   const pendingPayments = activeCustomers.filter(
     c => Number(c.remaining || 0) > 0
   ).length
 
-  // 🔹 Gender count
+  // Gender count
   const maleCount = activeCustomers.filter(c => c.gender === 'male').length
   const femaleCount = activeCustomers.filter(c => c.gender === 'female').length
 
-  // 🔹 Payment calculations (FROM payments collection)
+  // Payment calculations
   let cashTotal = 0
   let onlineTotal = 0
   let recentCollection = 0
 
-  const fromDate = new Date()
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+
+  const fromDate = new Date(todayStart)
   fromDate.setDate(fromDate.getDate() - Number(days))
 
   payments.forEach(p => {
@@ -94,12 +108,17 @@ export default function Dashboard({ setPage }) {
       onlineTotal += Number(p.amount || 0)
     }
 
-    if (payDate && payDate >= fromDate) {
+    if (!payDate) return
+
+    const paymentDateOnly = new Date(payDate)
+    paymentDateOnly.setHours(0, 0, 0, 0)
+
+    if (paymentDateOnly >= fromDate) {
       recentCollection += Number(p.amount || 0)
     }
   })
 
-  // 🔹 Pie chart (mess type)
+  // Pie chart (mess type)
   const messCounts = activeCustomers.reduce(
     (acc, c) => {
       acc[c.messType] = (acc[c.messType] || 0) + 1
@@ -122,38 +141,72 @@ export default function Dashboard({ setPage }) {
     <div style={styles.container}>
       <div style={styles.header}>
         <h1>📊 Dashboard</h1>
-        <button style={styles.backBtn} onClick={() => setPage('home')}>
+        <button
+          style={{
+            ...styles.backBtn,
+            width: isMobile ? '100%' : 'auto',
+          }}
+          onClick={() => setPage('home')}
+        >
           ⬅ Back
         </button>
       </div>
 
       <div style={styles.cards}>
-        <div style={styles.card}><h3>Total Active Customers</h3><p>{totalCustomers}</p></div>
-        <div style={styles.card}><h3>Total Collected</h3><p>₹{totalCollected}</p></div>
-        <div style={styles.card}><h3>Total Remaining</h3><p>₹{totalRemaining}</p></div>
-        <div style={styles.card}><h3>Ending in ≤ 5 days</h3><p>{endingSoon}</p></div>
-        <div style={styles.card}><h3>Pending Payments</h3><p>{pendingPayments}</p></div>
+        {[
+          { title: 'Total Active Customers', value: totalCustomers },
+          { title: 'Total Collected', value: `₹${totalCollected}` },
+          { title: 'Total Remaining', value: `₹${totalRemaining}` },
+          { title: 'Ending in ≤ 5 days', value: endingSoon },
+          { title: 'Pending Payments', value: pendingPayments },
+          { title: 'Male Customers', value: maleCount },
+          { title: 'Female Customers', value: femaleCount },
+          { title: 'Expired Customers', value: expiredCustomers },
+          { title: 'Paid by Cash', value: `₹${cashTotal}` },
+          { title: 'Paid by Online', value: `₹${onlineTotal}` },
+        ].map((item, index) => (
+          <div
+            key={index}
+            style={{
+              ...styles.card,
+              flex: isMobile ? '1 1 100%' : '1 1 200px',
+            }}
+          >
+            <h3>{item.title}</h3>
+            <p>{item.value}</p>
+          </div>
+        ))}
 
-        <div style={styles.card}><h3>Male Customers</h3><p>{maleCount}</p></div>
-        <div style={styles.card}><h3>Female Customers</h3><p>{femaleCount}</p></div>
-
-        <div style={styles.card}><h3>Expired Customers</h3><p>{expiredCustomers}</p></div>
-        <div style={styles.card}><h3>Paid by Cash</h3><p>₹{cashTotal}</p></div>
-        <div style={styles.card}><h3>Paid by Online</h3><p>₹{onlineTotal}</p></div>
-
-        <div style={styles.card}>
+        <div
+          style={{
+            ...styles.card,
+            flex: isMobile ? '1 1 100%' : '1 1 200px',
+          }}
+        >
           <h3>Money in Last {days} Days</h3>
           <input
             type="number"
             value={days}
             onChange={e => setDays(e.target.value)}
-            style={{ width: '80%', padding: 6, marginBottom: 10 }}
+            style={{
+              width: '100%',
+              padding: 8,
+              marginBottom: 10,
+            }}
           />
           <p>₹{recentCollection}</p>
         </div>
       </div>
 
-      <div style={{ marginTop: 30, maxWidth: 500, marginLeft: 'auto', marginRight: 'auto' }}>
+      <div
+        style={{
+          marginTop: 30,
+          maxWidth: isMobile ? '100%' : 500,
+          marginLeft: 'auto',
+          marginRight: 'auto',
+          padding: isMobile ? '0 10px' : 0,
+        }}
+      >
         <h3 style={{ textAlign: 'center' }}>Customers by Mess Type</h3>
         <Pie data={pieData} />
       </div>
@@ -162,12 +215,37 @@ export default function Dashboard({ setPage }) {
 }
 
 const styles = {
-  container: { padding: 20, background: '#f4f6f8', minHeight: '100vh' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  backBtn: { padding: '8px 12px', border: 'none', borderRadius: 6, background: '#667eea', color: '#fff' },
-  cards: { display: 'flex', gap: 15, marginTop: 20, flexWrap: 'wrap' },
+  container: {
+    padding: 20,
+    background: '#f4f6f8',
+    minHeight: '100vh',
+  },
+
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+
+  backBtn: {
+    padding: '8px 12px',
+    border: 'none',
+    borderRadius: 6,
+    background: '#667eea',
+    color: '#fff',
+    cursor: 'pointer',
+  },
+
+  cards: {
+    display: 'flex',
+    gap: 15,
+    marginTop: 20,
+    flexWrap: 'wrap',
+  },
+
   card: {
-    flex: '1 1 200px',
     padding: 20,
     background: '#fff',
     borderRadius: 10,
