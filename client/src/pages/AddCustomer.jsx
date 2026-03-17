@@ -15,6 +15,18 @@ export default function AddCustomer({ setPage }) {
     messType: 'general',
   })
 
+  useEffect(() => {
+  const today = new Date()
+  const end = new Date(today)
+  end.setDate(today.getDate() + 29)
+
+  setForm(prev => ({
+    ...prev,
+    startDate: today.toISOString().split('T')[0],
+    endDate: end.toISOString().split('T')[0],
+  }))
+}, [])
+
   // 🔹 Auto total amount by gender
   useEffect(() => {
     setForm(prev => ({
@@ -73,26 +85,31 @@ useEffect(() => {
 
   // 📅 Due date calculation
   const calculateDueDate = (startDate, endDate, totalAmount, paidAmount) => {
-    if (!paidAmount || paidAmount <= 0) return null
+  if (!startDate) return null
 
-    const start = new Date(startDate)
-    const end = new Date(endDate)
+  const start = new Date(startDate)
+  const end = new Date(endDate)
 
-    const totalDays = Math.ceil(
-      (end - start) / (1000 * 60 * 60 * 24)
-    )
-
-    if (totalDays <= 0) return null
-
-    const coveredDays = Math.floor(
-      totalDays * (paidAmount / totalAmount)
-    )
-
-    const due = new Date(start)
-    due.setDate(due.getDate() + coveredDays)
-
-    return due.toISOString().split('T')[0]
+  // If nothing paid → due date = start date
+  if (!paidAmount || paidAmount <= 0) {
+    return start.toISOString().split('T')[0]
   }
+
+  // If fully paid → due date = end date + 1
+  if (paidAmount >= totalAmount) {
+    const full = new Date(end)
+    full.setDate(full.getDate() + 1)
+    return full.toISOString().split('T')[0]
+  }
+
+  // Partial payment → each ₹100 = 1 day
+  const coveredDays = Math.floor(paidAmount / 100)
+
+  const due = new Date(start)
+  due.setDate(due.getDate() + coveredDays)
+
+  return due.toISOString().split('T')[0]
+}
 
   // 🔥 SAVE CUSTOMER + INITIAL PAYMENT (SAFE DESIGN)
   // 🔥 SAVE CUSTOMER + INITIAL PAYMENT (SAFE DESIGN)

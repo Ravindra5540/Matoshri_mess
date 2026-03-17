@@ -21,6 +21,29 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('customers', JSON.stringify(customers))
   }, [customers])
+  
+  useEffect(() => {
+  const handleBack = () => {
+    if (page === 'home') {
+      const confirmExit = window.confirm("Are you sure you want to exit?")
+      
+      if (confirmExit) {
+        window.history.back() // allow browser to exit
+      } else {
+        window.history.pushState({}, '')
+      }
+
+    } else {
+      setPage('home')
+      window.history.pushState({}, '')
+    }
+  }
+
+  window.history.pushState({}, '')
+  window.addEventListener('popstate', handleBack)
+
+  return () => window.removeEventListener('popstate', handleBack)
+}, [page])
 
   return (
     <>
