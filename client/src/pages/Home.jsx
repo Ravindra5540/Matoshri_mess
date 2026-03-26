@@ -1,6 +1,26 @@
-export default function Home({ setPage }) {
+import { auth } from "../firebase";
+import { signOut } from "firebase/auth";
+
+export default function Home({ setPage, setUser }) {
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);     // clear user
+      setPage("login");  // go back to login page
+    } catch (error) {
+      alert("Logout failed");
+    }
+  };
+
   return (
     <div className="container">
+
+      {/* Logout Button */}
+      <button className="logoutBtn" onClick={handleLogout}>
+        🚪 Logout
+      </button>
+
       <div className="card">
         <h1>🍽 Matoshri Bhojnalay</h1>
         <p className="subtitle">Choose an option to continue</p>
@@ -32,6 +52,7 @@ export default function Home({ setPage }) {
           align-items:center;
           padding:20px;
           background:linear-gradient(135deg,#667eea,#764ba2);
+          position:relative;
         }
 
         .card{
@@ -75,10 +96,35 @@ export default function Home({ setPage }) {
           transform:scale(1.03);
         }
 
+        /* Logout Button */
+        .logoutBtn{
+          position:absolute;
+          top:20px;
+          right:20px;
+          padding:10px 16px;
+          font-size:14px;
+          border:none;
+          border-radius:8px;
+          background:#ff4d4d;
+          color:white;
+          cursor:pointer;
+          transition:0.3s;
+        }
+
+        .logoutBtn:hover{
+          background:#e60000;
+          transform:scale(1.05);
+        }
+
         /* Tablet */
         @media(min-width:600px){
           .buttons{
             grid-template-columns:1fr 1fr;
+          }
+
+          .logoutBtn{
+            font-size:15px;
+            padding:12px 18px;
           }
         }
 
@@ -86,6 +132,11 @@ export default function Home({ setPage }) {
         @media(min-width:1000px){
           .buttons{
             grid-template-columns:1fr 1fr;
+          }
+
+          .logoutBtn{
+            font-size:16px;
+            padding:12px 20px;
           }
         }
 

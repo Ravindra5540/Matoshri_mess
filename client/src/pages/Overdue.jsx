@@ -100,9 +100,14 @@ export default function Overdue({ setPage }) {
 
             <p>
               <b>End Date:</b> {c.endDate}
-              {c.holidays > 0 && (
+              {(c.customerHolidays > 0 || c.ownerHolidays > 0) && (
                 <span style={{ color: '#555' }}>
-                  {' '} (+{c.holidays} holidays)
+                  {' '}
+                  (
+                  {c.customerHolidays > 0 && `+${c.customerHolidays} by customer`}
+                  {c.customerHolidays > 0 && c.ownerHolidays > 0 && ', '}
+                  {c.ownerHolidays > 0 && `+${c.ownerHolidays} by owner`}
+                  )
                 </span>
               )}
             </p>
