@@ -12,7 +12,7 @@ app.use(cors({
   origin: [
     "http://localhost:5173",   // Vite local
     "http://localhost:3000",   // React local
-    "https://your-frontend.web.app" // Firebase deployed URL
+    "https://mess-management-b803c.web.app" // Firebase deployed URL
   ],
   credentials: true
 }));
