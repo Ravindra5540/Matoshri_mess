@@ -109,11 +109,14 @@ export default function App() {
   if (!user) return <Login setUser={setUser} />
 
   // ❌ ONLY YOUR EMAIL CAN ACCESS
-  if (user.email !== "ravindrarajhans03@gmail.com") {
+  if (
+    user.email !== "ravindrarajhans03@gmail.com" &&
+    user.email !== "rajhanssanjay28@gmail.com"
+  ) {
     return (
       <div style={{ textAlign: "center", marginTop: "50px" }}>
         <h2>Access Denied ❌</h2>
-        
+
         <button onClick={() => {
           signOut(auth)
           setUser(null)

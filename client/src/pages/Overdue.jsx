@@ -44,6 +44,7 @@ export default function Overdue({ setPage }) {
 
     await deleteDoc(doc(db, 'customers', id))
     fetchCustomers()
+    alert("Customer deleted ✅")
   }
 
   return (

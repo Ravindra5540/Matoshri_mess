@@ -5,15 +5,6 @@ import { useEffect, useState } from "react";
 export default function Home({ setPage, setUser }) {
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    fetch("https://matoshri-mess.onrender.com/api/test")
-      .then(res => res.json())
-      .then(data => setMessage(data.message))
-      .catch(err => {
-        console.error(err);
-        setMessage("❌ Backend not connected");
-      });
-  }, []);
 
   const handleLogout = async () => {
     try {
@@ -37,9 +28,6 @@ export default function Home({ setPage, setUser }) {
         <h1>🍽 Matoshri Bhojnalay</h1>
         <p className="subtitle">Choose an option to continue</p>
         {/* ✅ SHOW BACKEND MESSAGE */}
-        <p style={{ color: "green", marginBottom: "10px" }}>
-          {message}
-        </p>
 
         <div className="buttons">
           <button onClick={() => setPage('dashboard')}>

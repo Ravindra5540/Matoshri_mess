@@ -9,11 +9,21 @@ export default function AddCustomer({ setPage }) {
     gender: 'male',
     startDate: '',
     endDate: '',
-    totalAmount: 2400,
+    totalAmount: 2600,
     paidAmount: 0,
     paymentType: 'cash',
     messType: 'general',
   })
+
+  const formatDateLocal = (date) => {
+  const d = new Date(date)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
   const today = new Date()
@@ -22,8 +32,8 @@ export default function AddCustomer({ setPage }) {
 
   setForm(prev => ({
     ...prev,
-    startDate: today.toISOString().split('T')[0],
-    endDate: end.toISOString().split('T')[0],
+    startDate: formatDateLocal(today),
+    endDate: formatDateLocal(end),
   }))
 }, [])
 
@@ -32,24 +42,24 @@ export default function AddCustomer({ setPage }) {
     setForm(prev => ({
       ...prev,
       totalAmount:
-        prev.totalAmount === 2400 || prev.totalAmount === 2000
+        prev.totalAmount === 2600 || prev.totalAmount === 2200
           ? prev.gender === 'male'
-            ? 2400
-            : 2000
+            ? 2600
+            : 2200
           : prev.totalAmount,
     }))
   }, [form.gender])
 
-  // 🔹 Auto end date (+30 days) — ALWAYS sync with start date
+  // 🔹 Auto end date (+30 days) — ALWAYS s ync with start date
 useEffect(() => {
   if (form.startDate) {
-    const start = new Date(form.startDate)
+    const start = new Date(form.startDate + "T00:00:00")
     const end = new Date(start)
     end.setDate(start.getDate() + 29)
 
     setForm(prev => ({
       ...prev,
-      endDate: end.toISOString().split('T')[0],
+      endDate: formatDateLocal(end),
     }))
   }
 }, [form.startDate])
@@ -83,8 +93,16 @@ useEffect(() => {
     return true
   }
 
+  const getDailyRate = (messType, gender) => {
+  if (messType === 'general') {
+    return gender === 'female' ? 100 : 120
+  } else {
+    // morning OR night
+    return gender === 'female' ? 50 : 60
+  }
+}
   // 📅 Due date calculation
-  const calculateDueDate = (startDate, endDate, totalAmount, paidAmount) => {
+  const calculateDueDate = (startDate, endDate, totalAmount, paidAmount,messType, gender) => {
   if (!startDate) return null
 
   const start = new Date(startDate)
@@ -92,30 +110,38 @@ useEffect(() => {
 
   // If nothing paid → due date = start date
   if (!paidAmount || paidAmount <= 0) {
-    return start.toISOString().split('T')[0]
+    return formatDateLocal(start)
   }
 
   // If fully paid → due date = end date + 1
   if (paidAmount >= totalAmount) {
     const full = new Date(end)
     full.setDate(full.getDate() + 1)
-    return full.toISOString().split('T')[0]
+    return formatDateLocal(full)
   }
 
-  // Partial payment → each ₹100 = 1 day
-  const coveredDays = Math.floor(paidAmount / 100)
+  // Partial payment → each ₹120 = 1 day
+  const dailyRate = getDailyRate(messType, gender)
+  const coveredDays = Math.floor(paidAmount / dailyRate) // 120 is daily rate for general mess
 
   const due = new Date(start)
   due.setDate(due.getDate() + coveredDays)
 
-  return due.toISOString().split('T')[0]
+  return formatDateLocal(due)
 }
 
   // 🔥 SAVE CUSTOMER + INITIAL PAYMENT (SAFE DESIGN)
   // 🔥 SAVE CUSTOMER + INITIAL PAYMENT (SAFE DESIGN)
 const handleSubmit = async () => {
+  if (loading) return   // 🚫 prevent double click
+
+  setLoading(true)
+
   try {
-    if (!validateForm()) return
+    if (!validateForm()) {
+      setLoading(false)
+      return
+    }
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -129,19 +155,18 @@ const handleSubmit = async () => {
 
     if (!window.confirm('Are you sure you want to save this customer?')) return
 
-    // 🔑 subscription id
-    // 🔑 subscription id (Mobile Safe)
-const subscriptionId =
-  Date.now().toString() + Math.random().toString(16).slice(2)
+    const subscriptionId =
+      Date.now().toString() + Math.random().toString(16).slice(2)
 
     const dueDate = calculateDueDate(
       form.startDate,
       form.endDate,
       Number(form.totalAmount),
-      Number(form.paidAmount)
+      Number(form.paidAmount),
+      form.messType,
+      form.gender
     )
 
-    // ✅ CUSTOMER DATA
     const customerData = {
       name: form.name,
       phone: form.phone,
@@ -157,13 +182,11 @@ const subscriptionId =
       currentSubscriptionId: subscriptionId,
     }
 
-    // 1️⃣ Save customer
     const customerRef = await addDoc(
       collection(db, 'customers'),
       customerData
     )
 
-    // 2️⃣ Save initial payment
     if (Number(form.paidAmount) > 0) {
       await addDoc(collection(db, 'payments'), {
         customerId: customerRef.id,
@@ -180,10 +203,9 @@ const subscriptionId =
 
   } catch (error) {
     console.error("FULL ERROR:", error)
-    alert(
-      "❌ Error Saving Customer:\n\n" +
-      (error?.message || JSON.stringify(error))
-    )
+    alert("❌ Error Saving Customer:\n\n" + (error?.message || JSON.stringify(error)))
+  } finally {
+    setLoading(false)   // 🔓 always unlock
   }
 }
 
@@ -357,7 +379,9 @@ const subscriptionId =
           </div>
 
           <div className="actions">
-            <button className="save" onClick={handleSubmit}>Save</button>
+            <button className="save" onClick={handleSubmit} disabled={loading}>
+              {loading ? "Saving..." : "Save"}
+            </button>
             <button className="cancel" onClick={() => setPage('home')}>Cancel</button>
           </div>
         </div>

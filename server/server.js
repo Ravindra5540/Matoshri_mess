@@ -3,6 +3,8 @@ const express = require("express");
 const cors = require("cors");
 
 const app = express();
+const messageRoutes = require("./routes/messageRoutes");
+const cronRoutes = require("./routes/cronRoutes");
 
 // ✅ Middleware
 app.use(express.json());
@@ -17,6 +19,9 @@ app.use(cors({
   credentials: true
 }));
 
+app.use("/api/messages", messageRoutes);
+
+app.use("/api/cron", cronRoutes);
 // ✅ Test Route
 app.get("/", (req, res) => {
   res.send("Backend is running 🚀");

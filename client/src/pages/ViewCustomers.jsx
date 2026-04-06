@@ -18,7 +18,25 @@ const diffDays = (start, end) => {
   return Math.max(1, Math.ceil((e - s) / (1000 * 60 * 60 * 24)))
 }
 
-const calculateDueDate = (startDate, endDate, totalAmount, paidAmount) => {
+const getDailyRate = (messType, gender) => {
+  if (messType === 'general') {
+    return gender === 'female' ? 100 : 120
+  } else {
+    // morning OR night
+    return gender === 'female' ? 50 : 60
+  }
+}
+
+const formatDateLocal = (date) => {
+  const d = new Date(date)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+
+const calculateDueDate = (startDate, endDate, totalAmount, paidAmount, messType, gender) => {
   if (!startDate) return null
 
   const start = new Date(startDate)
@@ -26,23 +44,24 @@ const calculateDueDate = (startDate, endDate, totalAmount, paidAmount) => {
 
   // If nothing paid → due date = start date
   if (!paidAmount || paidAmount <= 0) {
-    return start.toISOString().split('T')[0]
+    return formatDateLocal(start)
   }
 
   // If fully paid → due date = end date + 1
   if (paidAmount >= totalAmount) {
     const full = new Date(end)
     full.setDate(full.getDate() + 1)
-    return full.toISOString().split('T')[0]
+    return formatDateLocal(full)
   }
 
-  // Partial payment → each ₹100 = 1 day
-  const coveredDays = Math.floor(paidAmount / 100)
+  // Partial payment → each ₹120 = 1 day
+  const dailyRate = getDailyRate(messType, gender)
+  const coveredDays = Math.floor(paidAmount / dailyRate)
 
   const due = new Date(start)
   due.setDate(due.getDate() + coveredDays)
 
-  return due.toISOString().split('T')[0]
+  return formatDateLocal(due)
 }
 
 const remainingDaysFromToday = dueDate => {
@@ -66,12 +85,13 @@ export default function ViewCustomers({ setPage }) {
   const [paymentType, setPaymentType] = useState('cash')
   const [holidayCount, setHolidayCount] = useState('')
   const [holidayType, setHolidayType] = useState('customer')
+  const [loading, setLoading] = useState(false) 
 
   const [renewData, setRenewData] = useState({
     startDate: '',
     endDate: '',
     messType: 'general',
-    totalAmount: 2400,
+    totalAmount: 2600,
     paid: '',
     paymentType: 'cash',
   })
@@ -85,7 +105,7 @@ export default function ViewCustomers({ setPage }) {
 
       setRenewData(prev => ({
         ...prev,
-        endDate: end.toISOString().split('T')[0],
+        endDate: formatDateLocal(end),
       }))
     }
   }, [renewData.startDate, renewId])
@@ -107,10 +127,17 @@ export default function ViewCustomers({ setPage }) {
     fetchPayments()
   }, [])
 
-  const filteredCustomers = customers.filter(c =>
+  const filteredCustomers = customers
+  .filter(c =>
     c.name?.toLowerCase().includes(search.toLowerCase()) ||
     c.phone?.includes(search)
   )
+  .sort((a, b) => {
+  if (!a.startDate) return 1
+  if (!b.startDate) return -1
+
+  return new Date(a.startDate) - new Date(b.startDate)
+})
 
   // ✏️ Edit
   const handleEditChange = (docId, field, value) => {
@@ -135,27 +162,38 @@ export default function ViewCustomers({ setPage }) {
 
   // 💰 Add payment (SAFE)
   const addPayment = async c => {
+  if (loading) return
+  setLoading(true)
+
+  try {
     const pay = Number(amount)
-    if (!pay || pay <= 0) return alert('Enter valid amount')
-    if (c.paid + pay > c.totalAmount)
+    if (!pay || pay <= 0) {
+      setLoading(false)
+      return alert('Enter valid amount')
+    }
+
+    if (c.paid + pay > c.totalAmount) {
+      setLoading(false)
       return alert(`Remaining: ₹${c.totalAmount - c.paid}`)
+    }
 
     const newPaid = c.paid + pay
+
     const newDueDate = calculateDueDate(
       c.startDate,
       c.endDate,
       c.totalAmount,
-      newPaid
+      newPaid,
+      c.messType,
+      c.gender
     )
 
-    // 1️⃣ update customer totals
     await updateDoc(doc(db, 'customers', c.docId), {
       paid: newPaid,
       remaining: c.totalAmount - newPaid,
       dueDate: newDueDate,
     })
 
-    // 2️⃣ save payment separately
     await addDoc(collection(db, 'payments'), {
       customerId: c.docId,
       customerName: c.name,
@@ -170,12 +208,28 @@ export default function ViewCustomers({ setPage }) {
     setPaymentId(null)
     fetchCustomers()
     fetchPayments()
+
+    alert("Payment added ✅")
+
+  } catch (error) {
+    console.error(error)
+    alert("Error adding payment ❌")
+  } finally {
+    setLoading(false)
   }
+}
 
   // 📅 Holidays
   const addHolidays = async c => {
+  if (loading) return
+  setLoading(true)
+
+  try {
     const count = Number(holidayCount)
-    if (!count || count <= 0) return alert('Invalid holiday count')
+    if (!count || count <= 0) {
+      setLoading(false)
+      return alert('Invalid holiday count')
+    }
 
     const newEnd = new Date(c.endDate)
     newEnd.setDate(newEnd.getDate() + count)
@@ -194,11 +248,11 @@ export default function ViewCustomers({ setPage }) {
     if (c.paid === c.totalAmount) {
       const due = new Date(newEnd)
       due.setDate(due.getDate() + 1)
-      newDueDate = due.toISOString().split('T')[0]
+      newDueDate = formatDateLocal(due)
     }
 
     await updateDoc(doc(db, 'customers', c.docId), {
-      endDate: newEnd.toISOString().split('T')[0],
+      endDate: formatDateLocal(newEnd),
       customerHolidays,
       ownerHolidays,
       dueDate: newDueDate,
@@ -207,7 +261,16 @@ export default function ViewCustomers({ setPage }) {
     setHolidayCount('')
     setHolidayId(null)
     fetchCustomers()
+
+    alert("HOLIDAY ADDED ✅")
+
+  } catch (err) {
+    console.error(err)
+    alert("Error adding holiday ❌")
+  } finally {
+    setLoading(false)
   }
+}
 
   // 🔁 Renew
   const initRenew = c => {
@@ -217,10 +280,10 @@ export default function ViewCustomers({ setPage }) {
     end.setDate(end.getDate() + 30)
 
     setRenewData({
-      startDate: start.toISOString().split('T')[0],
-      endDate: end.toISOString().split('T')[0],
+      startDate: formatDateLocal(start),
+      endDate: formatDateLocal(end),
       messType: c.messType,
-      totalAmount: c.gender === 'female' ? 2000 : 2400,
+      totalAmount: c.gender === 'female' ? 2200 : 2600,
       paid: '',
       paymentType: 'cash',
     })
@@ -230,32 +293,53 @@ export default function ViewCustomers({ setPage }) {
   }
 
   const saveRenew = async c => {
+  if (loading) return
+  setLoading(true)
+
+  try {
     const total = Number(renewData.totalAmount)
     const paid = Number(renewData.paid || 0)
 
-    // 🔐 VALIDATIONS
-    if (!renewData.startDate) return alert('Start date required')
-    if (!renewData.endDate) return alert('End date required')
+    if (!renewData.startDate) {
+      setLoading(false)
+      return alert('Start date required')
+    }
 
-    if (new Date(renewData.endDate) <= new Date(renewData.startDate))
+    if (!renewData.endDate) {
+      setLoading(false)
+      return alert('End date required')
+    }
+
+    if (new Date(renewData.endDate) <= new Date(renewData.startDate)) {
+      setLoading(false)
       return alert('End date must be after start date')
+    }
 
-    if (!total || total <= 0)
+    if (!total || total <= 0) {
+      setLoading(false)
       return alert('Total amount must be greater than 0')
+    }
 
-    if (paid < 0) return alert('Paid amount cannot be negative')
+    if (paid < 0) {
+      setLoading(false)
+      return alert('Paid amount cannot be negative')
+    }
 
-    if (paid > total) return alert('Paid amount cannot exceed total')
+    if (paid > total) {
+      setLoading(false)
+      return alert('Paid amount cannot exceed total')
+    }
 
-    if (paid > 0 && !renewData.paymentType)
+    if (paid > 0 && !renewData.paymentType) {
+      setLoading(false)
       return alert('Select payment type')
+    }
 
-    // 🔁 subscription safety
-    if (new Date(renewData.startDate) <= new Date(c.endDate))
+    if (new Date(renewData.startDate) <= new Date(c.endDate)) {
+      setLoading(false)
       return alert('Renew start date must be after current end date')
+    }
 
-    // 🧾 PROCESS
-    // 🔑 subscription id (Mobile Safe)
     const newSubId =
       Date.now().toString() + Math.random().toString(16).slice(2)
 
@@ -263,7 +347,9 @@ export default function ViewCustomers({ setPage }) {
       renewData.startDate,
       renewData.endDate,
       total,
-      paid
+      paid,
+      renewData.messType,
+      c.gender
     )
 
     await updateDoc(doc(db, 'customers', c.docId), {
@@ -289,15 +375,25 @@ export default function ViewCustomers({ setPage }) {
         date: Timestamp.now(),
       })
     }
-    alert("Renew successful ✅")
+
     setRenewId(null)
     fetchCustomers()
     fetchPayments()
+
+    alert("Renew successful ✅")
+
+  } catch (error) {
+    console.error(error)
+    alert("Error in renew ❌")
+  } finally {
+    setLoading(false)
   }
+}
   const deleteCustomer = async c => {
     if (!window.confirm(`Delete ${c.name}?`)) return
     await deleteDoc(doc(db, 'customers', c.docId))
     fetchCustomers()
+     alert("Customer deleted ✅")
   }
 
   const cancelForms = () => {
@@ -413,7 +509,7 @@ export default function ViewCustomers({ setPage }) {
                     <option value="cash">Cash</option>
                     <option value="online">Online</option>
                   </select>
-                  <button onClick={() => addPayment(c)}>Add</button>
+                  <button onClick={() => addPayment(c)} disabled={loading}>Add</button>
                   <button onClick={cancelForms}>⬅ Cancel</button>
                 </div>
               )}
@@ -435,7 +531,9 @@ export default function ViewCustomers({ setPage }) {
                     <option value="owner">Owner Holiday</option>
                   </select>
 
-                  <button onClick={() => addHolidays(c)}>Apply</button>
+                  <button onClick={() => addHolidays(c)} disabled={loading}>
+                    Add Holiday
+                  </button>
                   <button onClick={cancelForms}>Cancel</button>
                 </div>
               )}
@@ -491,7 +589,9 @@ export default function ViewCustomers({ setPage }) {
                       <option value="online">Online</option>
                     </select>
 
-                    <button onClick={() => saveRenew(c)}>Save</button>
+                    <button onClick={() => saveRenew(c)} disabled={loading}>
+                      {loading ? "Saving..." : "Save"}
+                    </button>
                     <button onClick={cancelForms}>Cancel</button>
 
                   </div>
